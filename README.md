@@ -1,7 +1,7 @@
 
 # Vision Transformer (ViT) 模型实现
 
-本项目实现了基于Jittor框架的Vision Transformer模型，包括训练和推理功能。
+本项目实现了基于Jittor框架的Vision Transformer模型，已经搭建好基本的骨架，下一步需要进行检测头的搭建
 
 ## 项目结构
 
