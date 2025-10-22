@@ -35,16 +35,16 @@ class Block(nn.Module):
 
         self.norm1 = nn.LayerNorm(embed_dim)
         self.Multi_Head_Self_Attention = MultiHeadSelfAttention(
-            embed_dim=embed_dim,
+            embedded_dim=embed_dim,
             num_heads=num_heads,
             dropout_rate=dropout_rate
         )
         self.norm2 = nn.LayerNorm(embed_dim)
         self.MLP = MLP_Layer(
-            input_dim=embed_dim,
-            hidden_dim=hidden_dim,
-            output_dim=embed_dim,
-            dropout_rate=dropout_rate
+            embedded_dim=embed_dim,    
+            hidden_dim=hidden_dim,     
+            out_dim=embed_dim,        
+            dropout_rate=dropout_rate  
         )
     def execute(self, x):
         y = self.norm1(x)

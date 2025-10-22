@@ -11,7 +11,6 @@ project_root = current_dir
 
 for _ in range(2):
     project_root = os.path.dirname(project_root)
-print(f"Project root determined as: {project_root}")
 
 if project_root in sys.path:
     sys.path.remove(project_root)
