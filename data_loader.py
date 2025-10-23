@@ -1,168 +1,181 @@
-# %%
 import os
-import cv2
-from jittor import jt
+import jittor as jt
 from jittor.dataset import Dataset
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from jittor import transform as transforms
-from PIL import Image 
-from jittor.dataset import DataLoader 
+from PIL import Image #pillow
+import numpy as np
 
-# --- 配置参数 ---
+#prefix
+PREFIX_TO_CLASS = {
+    'TMBS': 0, 'TEB': 1, 'TLB': 2, 'TLM': 3, 
+    'TSLS': 4, 'TMSL': 4,
+    'TSM': 5, 'TTS': 6, 'TYLCV': 7, 'TMV': 8, 'TH': 9
+}
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(current_dir)
+CLASS_NAMES = [
+    'Bacterial_spot', 'Early_blight', 'Late_blight', 'Leaf_Mold',
+    'Septoria_leaf_spot', 'Spider_mites', 'Target_Spot',
+    'Yellow_Leaf_Curl_Virus', 'Tomato_mosaic_virus', 'Healthy'
+]
 
-# 修改数据集路径为绝对路径
-DATASET_PATH = os.path.join(project_root, 'tomato_yolo_dataset')
-# 训练集图片和标签路径
-IMAGE_Train_PATH = os.path.join(DATASET_PATH, 'images', 'train')
-LABEL_Train_PATH = os.path.join(DATASET_PATH, 'labels', 'train')
-
-# 类别名称字典，各种番茄的病症名称缩写
-
-CLASS_NAMES = {0: 'TMBS',
-              1: 'TEB',
-              2:'TLB',
-              3:'TLM',
-              4:'TSLS',
-              5:'TSM',
-              6:'TTS',
-              7:'TYLCV',
-              8:'TMV',
-              9:'TH'}
-
-
-
-# %%
-from config import Config
-config = Config()
-
-# %%
-class Tomato_DataSet(Dataset):
-
-    #image_dir:图片路径是tomato_yolo_dataset/images/train
-    #label_dir:标签路径是tomato_yolo_dataset/labels/train
-    #image_files:是image_dir下的所有图片名称组成的列表
-    def __init__(self, img_dir,label_dir, transform=None,img_size=config.IMG_SIZE):
+class TomatoDataset(Dataset):
+    def __init__(self,root_dir,mode = 'train',img_size=224):
         super().__init__()
-        self.img_dir = img_dir
-        self.label_dir = label_dir
-        self.transform = transform
         self.img_size = img_size
+        self.mode = mode
+        self.root_dir = root_dir
+        
+        self.img_dir = os.path.join(root_dir, 'images', mode)
+        self.label_dir = os.path.join(root_dir, 'labels', mode)
+        
+        self.samples = []
+        self._load_data()#把数据放到samples列表中，这里相当于直接执行了_load_data函数
+    def _load_data(self):
+        """加载YOLO格式数据"""
+        #检查图片路径
+        if not os.path.exists(self.img_dir):
+            raise ValueError(f"图片目录不存在: {self.img_dir}")
+        
+        #检查标签目录
+        if not os.path.exists(self.label_dir):
+            raise ValueError(f"标签目录不存在: {self.label_dir}")
+        
+        #遍历这个文件夹中的所有文件
+        for filename in os.listdir(self.img_dir):
+            if not filename.endswith(('.jpg', '.jpeg', '.png', '.JPG')):
+                continue
 
-        self.img_files = [f for f in os.listdir(img_dir) if f.endswith(('.jpg','.png','.jpeg')) ]
-        self.set_attrs(total_len=len(self.img_files))
+            img_path = os.path.join(self.img_dir, filename)
 
-    def __getitem__(self,idx):
-        try:
-            img_name = self.img_files[idx]
-            img_path = os.path.join(self.img_dir,img_name)
-            img =Image.open(img_path).convert('RGB')
+            label_path = os.path.join(self.label_dir, filename.rsplit('.', 1)[0] + '.txt')
 
-            #读取标签
-            label_path = os.path.join(self.label_dir,img_name.rsplit('.',1)[0]+'.txt')
-            boxes = [] #储存边界框
-            label = [] #储存类别标签
             if os.path.exists(label_path):
-                with open(label_path,'r') as f:
-                    for line in f.readlines():
-                        #YOLO格式
-                        class_id,x_center,y_center,width,height = map(float,line.strip().split())
-                        
-                        img_w,img_h = img.size
-                        x_center = x_center * img_w
-                        y_center = y_center * img_h
-                        width = width * img_w
-                        height = height * img_h
-
-                        x1 = x_center - width/2
-                        y1 = y_center - height/2
-                        x2 = x_center + width/2
-                        y2 = y_center + height/2
-
-                        boxes.append([x1,y1,x2,y2])
-                        label.append(int(class_id))
-            
-            if self.transform:
-                img = self.transform(img)  # 应用Resize和ToTensor
-
-                #使用ImageNet的均值和方差进行标准化
-                mean= jt.array([0.485, 0.456, 0.406]).view(3,1,1)
-                std = jt.array([0.229, 0.224, 0.225]).view(3,1,1)
-                img = (img - mean) / std
-            
-            boxes = np.array(boxes, dtype=np.float32) if boxes else np.zeros((0,4), dtype=np.float32)
-            label = np.array(label, dtype=np.int64) if label else np.zeros((0,), dtype=np.int64)
+                try:
+                    with open(label_path,'r') as f:
+                        line = f.readline().strip()
+                        if line:
+                            label = int(line.split()[0])
+                            self.samples.append((img_path,label))
+                            continue
+                except Exception as e:
+                    print(f"警告: 无法读取标签文件 {label_path}: {e}")
+        #如果没有标签文件，就推断标签
+        prefix = filename.split('_')[0]
+        if prefix in PREFIX_TO_CLASS:
+            label = PREFIX_TO_CLASS[prefix]
+            self.samples.append((img_path,label))
+    
+    def _print_stats(self):
+      
+        if len(self.samples) == 0:
+            print("  ⚠️  没有找到任何样本！")
+            return
         
-            return img, boxes, label
-            
-        except Exception as e:
-            print(f"Error loading {img_name}: {str(e)}")
-            # 返回一个空的样本（用于错误处理）
-            empty_img = jt.zeros((3, self.img_size, self.img_size))
-            empty_boxes = np.zeros((0, 4), dtype=np.float32)
-            empty_labels = np.zeros((0,), dtype=np.int64)
-            return empty_img, empty_boxes, empty_labels
-    def create_dataloader(
-                    data_root_dir,# path to data,路径是tomato_yolo_dataset
-                    images_train_dir = 'images/train',
-                    labels_train_dir = 'labels/train',
-                    images_val_dir = 'images/val',
-                    labels_val_dir = 'labels/val',
-                    batch_size=config.BATCH_SIZE,
-                    img_size=224,
-                    is_train = True):
-        """
-        Args:
-            data_root_dir: 数据集根目录
-            batch_size: 批次大小
-            img_size: 图片尺寸
-            is_train: 是否为训练模式
+        # 初始化计数器
+        counts = [0] * 10
         
-        Return:
-            dataloader: 数据加载器
-        """
+        # 统计每个类别的样本数
+        for _, label in self.samples:
+            counts[label] += 1
+        
+        # 打印统计信息
+        print(f"  类别分布:")
+        for i, count in enumerate(counts):
+            if count > 0:
+                print(f"    类别{i} ({CLASS_NAMES[i]}): {count}")
+
+
+    def __getitem__(self,idx):#根据索引获取图片路径和标签
+        img_path,label = self.samples[idx]
         try:
-            if is_train:
-                transform = transforms.Compose([
-                    transforms.Resize((img_size, img_size)),
-                    transforms.RandomHorizontalFlip(0.5),  # 随机水平翻转
-                    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),  # 颜色抖动
-                    transforms.ToTensor(),
-                ])
-            else:
-                transform = transforms.Compose([
-                    transforms.Resize((img_size, img_size)),
-                    transforms.ToTensor(),
-                ])
-            images_dir = os.path.join(data_root_dir , images_train_dir if is_train else images_val_dir)
-            labels_dir = os.path.join(data_root_dir , labels_train_dir if is_train else labels_val_dir)
+            #用PIL的Image打开图片
+            img = Image.open(img_path).convert('RGB')
+            #Bilinear双线性插值调整图片大小
+            img = img.resize((self.img_size,self.img_size),Image.BILINEAR)
 
-            dataset = Tomato_DataSet(
-                img_dir = images_dir,
-                label_dir = labels_dir,
-                transform = transform,
-                img_size = img_size
-            )
+            #转换为numpy数组
+            '''
+            重点:一定要copy,防止内存出错
+            '''
+            img_array = np.array(img,dtype=np.float32).copy()
 
-            dataloader = DataLoader(
-                dataset,
-                batch_size=batch_size,
-                shuffle=is_train,
-                num_workers=0,
-                drop_last=is_train
-            )
-            
-            return dataloader
+            #释放PIL对象
+            img.close()
+            del img
+
+            #归一化到0-1之间
+            img_array /= 255.0
+
+            #标准化
+            mean = np.array([0.485,0.456,0.406],dtype=  np.float32)
+            std = np.array([0.229,0.224,0.225],dtype = np.float32)
+            img_array = (img_array - mean) / std
+
+            #调整维度顺序HWC->CHW
+            #使用transpose函数，但是内存不连续了
+            img_array = np.transpose(img_array, (2, 0, 1))
+
+            #确保内存连续，防止jittor报错
+            img_array = np.ascontiguousarray(img_array)
 
         except Exception as e:
-            print(f"Error creating dataloader: {str(e)}")
-            return None
+            print(f"警告: 读取图片 {img_path} 失败: {e}")
+            img_array = np.zeros((3, self.img_size, self.img_size), dtype=np.float32)
+        
+        return img_array,label
+    def __len__(self):
+        return len(self.samples)
+
+def get_dataloader(root_dir,mode = 'train',
+                batch_size = 32,
+                img_size = 224,
+                shuffle = None,
+                num_workers = 0):
+    
+    dataset = TomatoDataset(root_dir,mode,img_size)
+
+    dataset.set_attrs(
+        batch_size = batch_size,
+        shuffle = shuffle,
+        num_workers = num_workers,###避免段错误
+        drop_last = False
+    )
+    return dataset
+
+if __name__ == '__main__':
+    # 关闭CUDA避免GPU内存问题
+    jt.flags.use_cuda = 0
+    
+    print("="*60)
+    print("番茄疾病数据集测试")
+    print("="*60)
+    
+    root = 'tomato_yolo_dataset'
+    
+    # 创建数据集
+    print("\n创建训练数据集...")
+    train_loader = get_dataloader(
+        root_dir=root,
+        mode='train',
+        batch_size=4,  # 先用小batch测试
+        img_size=224,
+        num_workers=0  # 必须为0
+    )
+    
+    # 测试数据加载
+    print("\n测试批次加载:")
+    try:
+        for i, (images, labels) in enumerate(train_loader):
+            print(f"Batch {i+1}: images={images.shape}, labels={labels.shape}")
+            print(f"  Label values: {labels.data}")
+            print(f"  Image range: [{float(images.min()):.3f}, {float(images.max()):.3f}]")
             
-            
-
-
-
-# %%
+            if i >= 2:
+                break
+        
+        print("\n✅ 测试成功!")
+        
+    except Exception as e:
+        print(f"\n❌ 错误: {e}")
+        import traceback
+        traceback.print_exc()
+     
