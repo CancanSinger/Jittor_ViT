@@ -58,6 +58,7 @@ class TomatoDataset(Dataset):
                             continue
                 except Exception as e:
                     print(f"警告: 无法读取标签文件 {label_path}: {e}")
+
         #如果没有标签文件，就推断标签
         prefix = filename.split('_')[0]
         if prefix in PREFIX_TO_CLASS:
@@ -128,10 +129,21 @@ class TomatoDataset(Dataset):
 def get_dataloader(root_dir,mode = 'train',
                 batch_size = 32,
                 img_size = 224,
-                shuffle = None,
-                num_workers = 0):
+                shuffle = True,
+                num_workers = 0,
+                sample_ratio = 0.1):
     
     dataset = TomatoDataset(root_dir,mode,img_size)
+
+     # 如果采样比例小于1.0，则进行采样
+    if sample_ratio < 1.0:
+        original_len = len(dataset)
+        sample_size = max(1, int(original_len * sample_ratio))  # 至少保留1个样本
+        # 随机选择样本索引
+        indices = np.random.choice(original_len, sample_size, replace=False)
+        # 创建新的样本列表
+        dataset.samples = [dataset.samples[i] for i in indices]
+        print(f"{mode} 数据集: 从 {original_len} 个样本中采样了 {sample_size} 个样本 ({sample_ratio*100:.1f}%)")
 
     dataset.set_attrs(
         batch_size = batch_size,
@@ -142,8 +154,6 @@ def get_dataloader(root_dir,mode = 'train',
     return dataset
 
 if __name__ == '__main__':
-    # 关闭CUDA避免GPU内存问题
-    jt.flags.use_cuda = 0
     
     print("="*60)
     print("番茄疾病数据集测试")

@@ -1,6 +1,7 @@
 # %%
 import jittor as jt
 from jittor import nn
+import numpy as np
 import math
 
 import sys
@@ -37,8 +38,13 @@ class patch_embedding_Layer(nn.Module):
         self.proj = nn.Conv2d(in_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
         
         # 使用可学习的参数
-        self.class_token = jt.init.gauss((1, 1, embed_dim))
-        self.position_embed = jt.init.gauss((1, 1 + self.num_patches, embed_dim))
+        self.class_token = jt.array(
+            np.random.randn(1, 1, embed_dim).astype(np.float32) * 0.02
+        )
+        self.position_embed = jt.array(
+            np.random.randn(1, 1 + self.num_patches, embed_dim).astype(np.float32) * 0.02
+        )
+
         
         # 添加归一化层
         self.norm = nn.LayerNorm(embed_dim)

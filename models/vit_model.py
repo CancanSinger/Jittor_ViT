@@ -1,6 +1,7 @@
 
 import sys
 import os
+import numpy as np
 
 current_dir = os.path.abspath('.')
 project_root = current_dir
@@ -94,7 +95,8 @@ class Visual_Transformer(nn.Module):
         ])
         self.classifier = nn.Sequential(
             nn.LayerNorm(embed_dim),
-            nn.Linear(embed_dim, config.NUM_CLASSES)
+            nn.Linear(embed_dim, 20),
+            nn.Linear(20, 10)
         )
 
     def execute(self, x):
@@ -105,5 +107,5 @@ class Visual_Transformer(nn.Module):
 
         class_token = x[:, 0]
         logits = self.classifier(class_token)
-
+        
         return logits

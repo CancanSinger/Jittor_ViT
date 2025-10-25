@@ -16,3 +16,5 @@ class Config:
         self.NUM_CLASSES = 10      # 分类任务的类别数
 
         self.LEARNING_RATE = 0.001 
+        self.NUM_WORKERS = 0        # 数据加载器的工作线程数
+        self.EPOCHS = 10             # 训练轮数
