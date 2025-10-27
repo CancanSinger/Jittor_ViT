@@ -31,40 +31,46 @@ class TomatoDataset(Dataset):
         self._load_data()#把数据放到samples列表中，这里相当于直接执行了_load_data函数
     def _load_data(self):
         """加载YOLO格式数据"""
-        #检查图片路径
+        # 检查图片路径
         if not os.path.exists(self.img_dir):
             raise ValueError(f"图片目录不存在: {self.img_dir}")
         
-        #检查标签目录
+        # 检查标签目录
         if not os.path.exists(self.label_dir):
             raise ValueError(f"标签目录不存在: {self.label_dir}")
         
-        #遍历这个文件夹中的所有文件
+        # 遍历这个文件夹中的所有文件
         for filename in os.listdir(self.img_dir):
             if not filename.endswith(('.jpg', '.jpeg', '.png', '.JPG')):
                 continue
 
             img_path = os.path.join(self.img_dir, filename)
-
             label_path = os.path.join(self.label_dir, filename.rsplit('.', 1)[0] + '.txt')
-
+            
+            label = None  # ✅ 初始化标签
+            
+            # 尝试从标签文件读取
             if os.path.exists(label_path):
                 try:
-                    with open(label_path,'r') as f:
+                    with open(label_path, 'r') as f:
                         line = f.readline().strip()
                         if line:
                             label = int(line.split()[0])
-                            self.samples.append((img_path,label))
-                            continue
                 except Exception as e:
                     print(f"警告: 无法读取标签文件 {label_path}: {e}")
-
-        #如果没有标签文件，就推断标签
-        prefix = filename.split('_')[0]
-        if prefix in PREFIX_TO_CLASS:
-            label = PREFIX_TO_CLASS[prefix]
-            self.samples.append((img_path,label))
-    
+            
+            # 如果没有从文件读取到标签，尝试从文件名推断
+            if label is None:
+                prefix = filename.split('_')[0]
+                if prefix in PREFIX_TO_CLASS:
+                    label = PREFIX_TO_CLASS[prefix]
+            
+            # 只有成功获取标签才添加样本
+            if label is not None:
+                self.samples.append((img_path, label))
+            else:
+                print(f"警告: 无法获取标签 {filename}，已跳过")
+        
     def _print_stats(self):
       
         if len(self.samples) == 0:

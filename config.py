@@ -17,4 +17,4 @@ class Config:
 
         self.LEARNING_RATE = 0.001 
         self.NUM_WORKERS = 0        # 数据加载器的工作线程数
-        self.EPOCHS = 10             # 训练轮数
+        self.EPOCHS = 15             # 训练轮数
